@@ -1,0 +1,32 @@
+FROM bde2020/spark-worker:2.4.0-hadoop2.7
+ADD file:2ff00caea4e83dfade726ca47e3c795a1e9acb8ac24e392785c474ecf9a621f2 in /
+CMD ["/bin/sh"]
+MAINTAINER Erika Pauwels <erika.pauwels@tenforce.com>
+MAINTAINER Gezim Sejdiu <g.sejdiu@gmail.com>
+ENV ENABLE_INIT_DAEMON=true
+ENV INIT_DAEMON_BASE_URI=http://identifier/init-daemon
+ENV INIT_DAEMON_STEP=spark_master_init
+ENV SPARK_VERSION=2.4.0
+ENV HADOOP_VERSION=2.7
+COPY file:15e73f0ef2b74b916a1c49c7746118c1c84aabd468a71a07480f4fa5af255e86 in /
+COPY file:6aa613c31baac4afdf4d594bb05f7d817ec6696620899ddb8147915eb24161ab in /
+COPY file:e2d1614e26b00c6469217e03d8922d1b5ba806a33464e72f716e0cbb0d2810d9 in /
+RUN /bin/sh -c apk add --no-cache curl bash openjdk8-jre python3 py-pip       \
+    && chmod +x *.sh       \
+    && wget http://apache.mirror.iphh.net/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-hadoop${HADOOP_VERSION}.tgz       \
+    && tar -xvzf spark-${SPARK_VERSION}-bin-hadoop${HADOOP_VERSION}.tgz       \
+    && mv spark-${SPARK_VERSION}-bin-hadoop${HADOOP_VERSION} spark       \
+    && rm spark-${SPARK_VERSION}-bin-hadoop${HADOOP_VERSION}.tgz       \
+    && cd /
+RUN /bin/sh -c chmod +x /wait-for-step.sh \
+    && chmod +x /execute-step.sh \
+    && chmod +x /finish-step.sh
+ENV PYTHONHASHSEED=1
+MAINTAINER Erika Pauwels <erika.pauwels@tenforce.com>
+MAINTAINER Gezim Sejdiu <g.sejdiu@gmail.com>
+COPY file:2210914b50e4fad5b5f26d50b36f3c9cb61f2ace8bd9c80abbe9d22e501c41a3 in /
+ENV SPARK_WORKER_WEBUI_PORT=8081
+ENV SPARK_WORKER_LOG=/spark/logs
+ENV SPARK_MASTER=spark://spark-master:7077
+EXPOSE 8081
+CMD ["/bin/bash" "/worker.sh"]

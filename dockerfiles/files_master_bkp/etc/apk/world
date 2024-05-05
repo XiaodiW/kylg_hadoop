@@ -1,0 +1,10 @@
+alpine-baselayout
+alpine-keys
+apk-tools
+bash
+busybox
+curl
+libc-utils
+openjdk8-jre
+py-pip
+python3

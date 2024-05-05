@@ -1,0 +1,308 @@
+version: '3' 
+services:
+
+  namenode:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop2.7.4-java8
+    container_name: spark-namenode
+    volumes:
+      - ./tmp/hdfs/namenode:/hadoop/dfs/name
+    environment:
+      - CLUSTER_NAME=test
+    env_file:
+      - ./hadoop-hive.env
+    ports:
+      - "50070:50070"
+    networks:
+      net_pet:
+        ipv4_address: 172.27.1.5
+  
+  datanode:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop2.7.4-java8
+    container_name: spark-datanode
+    volumes:
+      - ./tmp/hdfs/datanode:/hadoop/dfs/data
+      - ./bank:/bank
+    env_file:
+      - ./hadoop-hive.env
+    environment:
+      SERVICE_PRECONDITION: "namenode:50070"
+    depends_on:
+      - namenode
+    ports:
+      - "50075:50075"
+    networks:
+      net_pet:
+        ipv4_address: 172.27.1.6
+  
+  hive-server:
+    image: bde2020/hive:2.3.2-postgresql-metastore
+    container_name: spark-hive-server
+    env_file:
+      - ./hadoop-hive.env
+    environment:
+      HIVE_CORE_CONF_javax_jdo_option_ConnectionURL: "jdbc:postgresql://hive-metastore/metastore"
+      SERVICE_PRECONDITION: "hive-metastore:9083"
+    ports:
+      - "10000:10000"
+    depends_on:
+      - hive-metastore
+    networks:
+      net_pet:
+        ipv4_address: 172.27.1.7
+  
+  hive-metastore:
+    image: bde2020/hive:2.3.2-postgresql-metastore
+    container_name: spark-hive-metastore
+    env_file:
+      - ./hadoop-hive.env
+    command: /opt/hive/bin/hive --service metastore
+    environment:
+      SERVICE_PRECONDITION: "namenode:50070 datanode:50075 hive-metastore-postgresql:5432"
+    ports:
+      - "9083:9083"
+    depends_on:
+      - hive-metastore-postgresql
+    networks:
+      net_pet:
+        ipv4_address: 172.27.1.8
+  
+  hive-metastore-postgresql:
+    image: bde2020/hive-metastore-postgresql:2.3.0
+    container_name: spark-hive-metastore-postgresql
+    depends_on:
+      - datanode
+    networks:
+      net_pet:
+        ipv4_address: 172.27.1.9
+ 
+  spark-master:
+    image: spark-master:3.1.2_2.7
+    user: root # Run container as root container: https://docs.bitnami.com/tutorials/work-with-non-root-containers/
+    container_name: spark-spark-master
+    volumes:
+        - ./spark/app:/usr/local/spark/app #Spark Scripts (Must be the same path in airflow and Spark Cluster)
+        - ./spark/resources:/usr/local/spark/resources #Resources folder (Must be the same path in airflow and Spark Cluster)    
+    ports:
+      - 8080:8080
+      - 7077:7077
+      - 4040:4040
+    environment:
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:8020
+      - SPARK_MODE=master
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no      
+    env_file:
+      - ./hadoop-hive.env
+    networks:
+      net_pet:
+        ipv4_address: 172.27.1.10        
+  
+  spark-worker-1:
+    image: spark-worker:3.1.2_2.7
+    user: root
+    container_name: spark-spark-worker
+    volumes:
+        - ./spark/app:/usr/local/spark/app #Spark Scripts (Must be the same path in airflow and Spark Cluster)
+        - ./spark/resources:/usr/local/spark/resources #Resources folder (Must be the same path in airflow and Spark Cluster)        
+    depends_on:
+      - spark-master
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - SPARK_MASTER=spark://spark-master:7077
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:8020
+      - HIVE_CORE_CONF_javax_jdo_option_ConnectionURL=jdbc:postgresql://hive-metastore/metastore
+#      - SPARK_WORKER_MEMORY=1G
+#      - SPARK_WORKER_CORES=1
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no      
+    depends_on:
+      - spark-master
+    ports:
+      - 8081:8081
+    env_file:
+      - ./hadoop-hive.env
+    networks:
+      net_pet:
+        ipv4_address: 172.27.1.11
+
+  spark-worker-2:
+    image: spark-worker:3.1.2_2.7
+    user: root
+    container_name: spark-spark-worker-2
+    volumes:
+        - ./spark/app:/usr/local/spark/app #Spark Scripts (Must be the same path in airflow and Spark Cluster)
+        - ./spark/resources:/usr/local/spark/resources #Resources folder (Must be the same path in airflow and Spark Cluster)        
+    depends_on:
+      - spark-master
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - SPARK_MASTER=spark://spark-master:7077
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:8020
+      - HIVE_CORE_CONF_javax_jdo_option_ConnectionURL=jdbc:postgresql://hive-metastore/metastore
+#      - SPARK_WORKER_MEMORY=1G
+#      - SPARK_WORKER_CORES=1
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no      
+    depends_on:
+      - spark-master
+    ports:
+      - 8082:8081
+    env_file:
+      - ./hadoop-hive.env
+    networks:
+      net_pet:
+        ipv4_address: 172.27.1.21        
+ 
+  zeppelin:
+    image: apache/zeppelin:0.8.0
+    container_name: spark-zeppelin
+    ports:
+      - 19090:8080
+    networks:
+      net_pet:
+        ipv4_address: 172.27.1.12
+
+  hue:
+      image: gethue/hue:20191107-135001
+      hostname: hue
+      container_name: spark-hue
+      dns: 8.8.8.8
+      ports:
+      - "8888:8888"
+      volumes:
+        - ./hue-overrides.ini:/usr/share/hue/desktop/conf/z-hue.ini
+      depends_on:
+      - "database"
+      networks:
+        net_pet:
+          ipv4_address: 172.27.1.13
+  
+  database:
+      image: mysql:5.7
+      container_name: spark-database
+      ports:
+          - "33061:3306"
+      command: --init-file /data/application/init.sql
+      volumes:
+          - ./tmp/mysql/data:/var/lib/mysql
+          - ./init.sql:/data/application/init.sql
+      environment:
+          MYSQL_ROOT_USER: hueroot
+          MYSQL_ROOT_PASSWORD: secret
+          MYSQL_DATABASE: hue
+          MYSQL_PASSWORD: secret
+          MYSQL_USER: hueroot
+      networks:
+        net_pet:
+          ipv4_address: 172.27.1.14
+
+  zookeeper:
+    hostname: zookeeper
+    container_name: spark-zookeeper
+    image: bitnami/zookeeper:latest
+    environment:
+      - ALLOW_ANONYMOUS_LOGIN=yes
+    ports:
+      - "2181:2181"
+    networks:
+      net_pet:
+        ipv4_address: 172.27.1.15
+
+  kafka:
+    image: landoop/fast-data-dev:latest
+    container_name: spark-kafka
+    ports:
+      - "9092:9092"
+      - "3030:3030"    
+    environment:
+      KAFKA_ADVERTISED_HOST_NAME: 172.27.1.16
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+    networks:
+      net_pet:
+        ipv4_address: 172.27.1.16  
+
+  streamsets:
+    image: streamsets/datacollector:3.13.0-latest
+    container_name: spark-streamsets
+    ports:
+      - "18630:18630"
+    networks:
+      net_pet:
+        ipv4_address: 172.27.1.17  
+
+  nifi:
+    image: apache/nifi:latest
+    container_name: spark-nifi
+    ports:
+      - 9999:9999
+    environment:
+      - NIFI_WEB_HTTP_PORT=9999
+      - NIFI_CLUSTER_IS_NODE=true
+      - NIFI_CLUSTER_NODE_PROTOCOL_PORT=8082
+      - NIFI_ZK_CONNECT_STRING=zookeeper:2181
+      - NIFI_ELECTION_MAX_WAIT=1 min 
+      - NIFI_SENSITIVE_PROPS_KEY=testpassword 
+    networks:
+      net_pet:
+        ipv4_address: 172.27.1.18    
+
+  # postgres used by airflow
+  postgres:
+    image: postgres:9.6
+    container_name: spark-airflow-postgres
+    volumes: 
+        # Create Test database on Postgresql
+        - ./tmp/pg-init-scripts:/docker-entrypoint-initdb.d
+        - ./tmp/postgresql:/var/lib/postgresql/data
+    environment:
+        POSTGRES_USER: airflow
+        POSTGRES_PASSWORD: airflow
+        POSTGRES_DB: airflow
+    ports:
+        - "5433:5433"
+    networks:
+      net_pet:
+        ipv4_address: 172.27.1.19       
+
+  # airflow LocalExecutor
+  airflow-webserver:
+    image: docker-airflow-spark:1.10.7_3.1.2
+    container_name: spark-airflow-webserver
+    restart: always
+    depends_on:
+        - postgres
+    environment:
+        - LOAD_EX=n
+        - EXECUTOR=Local
+        - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres:5433/airflow
+        - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+    volumes:
+        - ./dags:/usr/local/airflow/dags #DAG folder
+        - ./spark/app:/usr/local/spark/app #Spark Scripts (Must be the same path in airflow and Spark Cluster)
+        - ./spark/resources:/usr/local/spark/resources #Resources folder (Must be the same path in airflow and Spark Cluster)
+    ports:
+        - "8282:8282"
+    command: webserver
+    healthcheck:
+        test: ["CMD-SHELL", "[ -f /usr/local/airflow/airflow-webserver.pid ]"]
+        interval: 30s
+        timeout: 30s
+        retries: 3   
+    networks:
+      net_pet:
+        ipv4_address: 172.27.1.20                 
+
+networks:
+  net_pet:
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.27.0.0/16
